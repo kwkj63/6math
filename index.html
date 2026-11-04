@@ -10,6 +10,7 @@
     --bg1:#fff1f6; --bg2:#ffe9f1; --bg3:#fff6ea;
     --blob1:#ffc2da; --blob2:#ffdcc2; --blob3:#e9d6ff;
     --accent:#f4c542;
+    --padH:clamp(170px, 28vh, 280px);   /* 풀이 공간 높이 */
   }
   body[data-theme="sakura"]{--bg1:#fff1f6;--bg2:#ffe9f1;--bg3:#fff6ea;--blob1:#ffc2da;--blob2:#ffdcc2;--blob3:#e9d6ff}
   body[data-theme="ocean"] {--bg1:#e9f6ff;--bg2:#e3fbf7;--bg3:#eef1ff;--blob1:#b9e0ff;--blob2:#b5f0e4;--blob3:#cbd5ff}
@@ -28,6 +29,7 @@
       radial-gradient(circle at 15% 88%,var(--blob3) 0,transparent 30%),
       radial-gradient(circle at 88% 85%,var(--blob1) 0,transparent 24%)}
   #app{width:100%;max-width:520px;position:relative;z-index:1}
+  #app.wide{max-width:680px}
   section{background:rgba(255,255,255,.93);border-radius:36px;padding:24px 20px;
           box-shadow:0 10px 28px rgba(150,130,180,.22)}
   h1{font-size:2rem;margin:4px 0 6px;text-align:center}
@@ -97,14 +99,34 @@
   .bar div{height:100%;width:100%;background:var(--ok);border-radius:999px;transition:width .1s linear}
   .question{font-size:2.7rem;font-weight:800;text-align:center;margin:10px 0;
             background:#fff0b3;border:5px solid var(--accent);
-            border-radius:32px;padding:22px 8px;letter-spacing:1px;transition:background .2s,border-color .2s}
+            border-radius:32px;padding:18px 8px;letter-spacing:1px;transition:background .2s,border-color .2s}
+
+  /* 풀이 공간 */
+  .padwrap{display:flex;gap:12px;align-items:stretch;margin:12px 0 14px;padding-bottom:6px}
+  .canvaswrap{position:relative;flex:1;min-width:0;height:var(--padH);
+              border:5px solid var(--accent);border-radius:28px;overflow:hidden;background-color:#fffefa;
+              background-image:
+                linear-gradient(rgba(150,130,180,.14) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(150,130,180,.14) 1px, transparent 1px);
+              background-size:26px 26px;transition:border-color .2s}
+  #scratch{position:absolute;inset:0;width:100%;height:100%;display:block;
+           touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:crosshair}
+  #scratch.erasing{cursor:cell}
+  .padhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+           pointer-events:none;font-size:1.15rem;font-weight:700;color:#b3a9c6;padding:10px}
+  .padhint.off{display:none}
+  .tools{display:flex;flex-direction:column;gap:12px;width:74px;justify-content:center}
+  .tools button{padding:10px 0 8px;font-size:1.6rem;line-height:1.1}
+  .tools button small{display:block;font-size:.8rem;font-weight:800;margin-top:2px}
+  .tools button.on{outline:4px solid #5b4bc2;outline-offset:2px}
+
   .answer{font-size:2.5rem;font-weight:800;text-align:center;min-height:78px;line-height:68px;
           border:5px dashed var(--accent);border-radius:32px;margin:10px 0;background:#fff}
   .answer.ok{border-color:var(--ok);background:#effcf5}
   .answer.no{border-color:var(--no);background:#fff0f1;animation:shake .3s}
   @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
   .toast{text-align:center;font-size:1.2rem;font-weight:800;height:1.6em;margin-bottom:8px}
-  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-bottom:6px}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-bottom:6px;max-width:520px;margin:0 auto}
   .pad button{padding:14px 0;font-size:2rem}
   .pad .enter{grid-column:1 / -1;font-size:1.7rem;padding:16px 0}
   .pad .skip{grid-column:1 / -1;font-size:1.15rem;padding:10px 0}
@@ -188,6 +210,20 @@
     </div>
     <div class="bar"><div id="barFill"></div></div>
     <div class="question" id="question"></div>
+
+    <!-- 풀이 공간 + 옆 도구 버튼 -->
+    <div class="padwrap">
+      <div class="canvaswrap">
+        <canvas id="scratch"></canvas>
+        <div class="padhint" id="padHint">✏️ 여기에 풀이를 써 보세요</div>
+      </div>
+      <div class="tools" id="tools">
+        <button class="candy c-lime on" data-tool="pen" aria-label="펜">✏️<small>펜</small></button>
+        <button class="candy c-pink" data-tool="eraser" aria-label="지우개">🧽<small>지우개</small></button>
+        <button class="candy c-sky" data-tool="clear" aria-label="전체 지우기">🗑️<small>전체</small></button>
+      </div>
+    </div>
+
     <div class="answer" id="answer"></div>
     <div class="toast" id="toast"></div>
     <div class="pad" id="pad">
@@ -274,7 +310,7 @@ try {
 async function ensureUid(){
   if (uid) return uid;
   if (!auth) throw new Error("no-auth");
-  const cred = await signInAnonymously(auth);   // 이미 로그인된 기기는 같은 사용자 반환
+  const cred = await signInAnonymously(auth);
   uid = cred.user.uid;
   return uid;
 }
@@ -300,10 +336,16 @@ const QCOLORS = [
   ["#fff0b3","#f4c542"], ["#ffd6e7","#ff8fb8"], ["#d4f5e9","#5fd3a0"],
   ["#d6ebff","#5aaef5"], ["#e6dcff","#a78bfa"], ["#ffe0cc","#ff9f6b"]
 ];
-function show(name){ for (const k in screens) screens[k].hidden = (k !== name); window.scrollTo(0,0); }
+function show(name){
+  for (const k in screens) screens[k].hidden = (k !== name);
+  $("app").classList.toggle("wide", name === "play");
+  window.scrollTo(0,0);
+}
 
 let nick = "", level = 1, endAt = 0, timerId = null, cur = null, input = "";
 let correct = 0, total = 0, wrong = [], running = false, colorIdx = 0, boardLevel = 1;
+let tries = 0, firstWrong = "";
+const RETRY_COUNTS = true;   // true: 두 번째 시도 정답도 점수 인정 / false: 첫 시도 정답만 인정
 
 /* ===== 로컬 저장 ===== */
 const K_BEST = "decimalDivBest_v2", K_THEME = "decimalDivTheme_v1", K_NICK = "decimalDivNick_v1";
@@ -318,6 +360,100 @@ function setTheme(t, save){
   document.querySelectorAll("#themes button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
   if (save) lsSet(K_THEME, t);
 }
+
+/* ===== 풀이 공간 (스마트펜 / 손가락 / 마우스) ===== */
+const cv = $("scratch");
+const ctx = cv.getContext("2d");
+let tool = "pen", drawing = false, activePid = null, lastPt = null, penSeen = false, strokeTool = "pen";
+
+function fitCanvas(){
+  const r = cv.getBoundingClientRect();
+  if (r.width < 2 || r.height < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+  if (cv.width === w && cv.height === h) return;
+  const tmp = document.createElement("canvas");
+  tmp.width = cv.width; tmp.height = cv.height;
+  if (cv.width && cv.height) tmp.getContext("2d").drawImage(cv, 0, 0);
+  cv.width = w; cv.height = h;
+  ctx.drawImage(tmp, 0, 0);
+}
+function clearPad(){
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  $("padHint").classList.remove("off");
+}
+function setTool(t){
+  tool = t;
+  document.querySelectorAll("#tools button[data-tool]").forEach(b => {
+    if (b.dataset.tool !== "clear") b.classList.toggle("on", b.dataset.tool === t);
+  });
+  cv.classList.toggle("erasing", t === "eraser");
+}
+function ptOf(e){
+  const r = cv.getBoundingClientRect();
+  const k = cv.width / r.width;
+  return { x:(e.clientX - r.left) * k, y:(e.clientY - r.top) * k, k:k, p:e.pressure };
+}
+function drawSeg(a, b, pointerType){
+  const k = b.k;
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (strokeTool === "eraser"){
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.lineWidth = 24 * k;
+  } else {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = "#3b3550";
+    let w = 3.2;
+    if (pointerType === "pen" && b.p > 0) w = 1.6 + b.p * 4;   // 필압 반영
+    ctx.lineWidth = w * k;
+  }
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  ctx.globalCompositeOperation = "source-over";
+}
+cv.addEventListener("pointerdown", e => {
+  if (!running) return;
+  if (e.pointerType === "pen") penSeen = true;
+  if (e.pointerType === "touch" && penSeen) return;          // 손바닥 방지
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  e.preventDefault();
+  try { cv.setPointerCapture(e.pointerId); } catch(err){}
+  drawing = true; activePid = e.pointerId;
+  strokeTool = (e.buttons & 32) ? "eraser" : tool;          // 펜 뒤쪽 지우개 버튼
+  $("padHint").classList.add("off");
+  const p = ptOf(e);
+  lastPt = p;
+  drawSeg(p, { x:p.x + 0.01, y:p.y + 0.01, k:p.k, p:p.p }, e.pointerType);   // 점 찍기
+});
+cv.addEventListener("pointermove", e => {
+  if (!drawing || e.pointerId !== activePid) return;
+  e.preventDefault();
+  const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+  for (const ev of evs){
+    const p = ptOf(ev);
+    drawSeg(lastPt, p, e.pointerType);
+    lastPt = p;
+  }
+});
+function endStroke(e){
+  if (e.pointerId !== activePid) return;
+  drawing = false; activePid = null; lastPt = null;
+}
+cv.addEventListener("pointerup", endStroke);
+cv.addEventListener("pointercancel", endStroke);
+cv.addEventListener("lostpointercapture", endStroke);
+cv.addEventListener("contextmenu", e => e.preventDefault());
+
+$("tools").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.tool === "clear") clearPad();
+  else setTool(b.dataset.tool);
+});
+if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(cv);
+window.addEventListener("resize", fitCanvas);
 
 /* ===== 문제 생성 (정수 연산) ===== */
 const rnd = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
@@ -345,7 +481,7 @@ function enter(){
   lsSet(K_NICK, nick);
   $("loginNote").textContent = "";
   goHome();
-  ensureUid().catch(err => console.warn("익명 로그인 실패:", err));   // 미리 로그인
+  ensureUid().catch(err => console.warn("익명 로그인 실패:", err));
 }
 function goHome(){
   $("hello").textContent = "안녕, " + nick + "! 👋";
@@ -364,6 +500,8 @@ function start(){
   correct = 0; total = 0; wrong = []; input = ""; running = true; colorIdx = rnd(0, QCOLORS.length-1);
   $("sc").textContent = "0"; $("toast").textContent = "";
   show("play");
+  fitCanvas();
+  setTool("pen");
   nextQ();
   endAt = Date.now() + DURATION*1000;
   tick();
@@ -371,12 +509,13 @@ function start(){
   timerId = setInterval(tick, 100);
 }
 function nextQ(){
-  cur = make(level); input = "";
+  cur = make(level); input = ""; tries = 0; firstWrong = "";
   colorIdx = (colorIdx + 1) % QCOLORS.length;
   const c = QCOLORS[colorIdx];
   $("question").style.background = c[0];
   $("play").style.setProperty("--accent", c[1]);
   $("question").textContent = cur.text + " = ?";
+  clearPad();                       // 새 문제가 나오면 풀이 공간 비우기
   renderAnswer();
 }
 function renderAnswer(){
@@ -413,10 +552,30 @@ function flash(ok, msg){
 function submit(){
   if (input === "" || input === "." || input === "0.") return;
   const ok = Math.abs(parseFloat(input) - cur.answerNum) < 1e-9;
+  const mine = input;
+
+  if (ok){
+    total++;
+    if (tries === 0 || RETRY_COUNTS){
+      correct++; $("sc").textContent = correct;
+    } else {
+      wrong.push({q:cur.text, mine:firstWrong + " → " + mine, ans:cur.answerText});
+    }
+    flash(true, tries === 0 ? "정답! 👍" : "두 번째에 맞혔어요! 👏");
+    nextQ();
+    return;
+  }
+
+  // 오답
+  if (tries === 0){
+    tries = 1; firstWrong = mine; input = "";
+    renderAnswer();
+    flash(false, "아쉬워요! 한 번 더 도전해 봐요 💪");
+    return;
+  }
   total++;
-  if (ok){ correct++; $("sc").textContent = correct; }
-  else { wrong.push({q:cur.text, mine:input, ans:cur.answerText}); }
-  flash(ok, ok ? "정답! 👍" : "아쉬워요 😢");
+  wrong.push({q:cur.text, mine:firstWrong + " → " + mine, ans:cur.answerText});
+  flash(false, "아쉬워요! 정답은 " + cur.answerText + " 😢");
   nextQ();
 }
 function skip(){
@@ -429,6 +588,7 @@ function skip(){
 function finish(){
   if (!running) return;
   running = false;
+  drawing = false;
   clearInterval(timerId);
   const b = loadBest();
   const prev = b[level];
@@ -482,7 +642,6 @@ async function fetchTop(lv){
   return rows;
 }
 
-// 목록 그리기: 상위 10명 + (10위 밖이면) 내 줄. 내 등수를 반환
 function renderRows(ol, rows, myId){
   ol.innerHTML = "";
   const medal = {1:"🥇",2:"🥈",3:"🥉"};
@@ -537,7 +696,7 @@ async function loadBoard(lv){
   try {
     const id = await ensureUid();
     const rows = await fetchTop(lv);
-    if (boardLevel !== lv) return;   // 탭을 빨리 바꾼 경우
+    if (boardLevel !== lv) return;
     const rank = renderRows($("bList"), rows, id + "_" + lv);
     st.textContent = !rows.length ? "아직 기록이 없어요. 첫 주인공이 되어 보세요!"
                    : rank ? "내 등수: " + rank + "위" : "";
